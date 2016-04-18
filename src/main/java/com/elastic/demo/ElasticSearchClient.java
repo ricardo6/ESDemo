@@ -1,5 +1,7 @@
 package com.elastic.demo;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexResponse;
 import org.elasticsearch.action.admin.indices.flush.FlushRequest;
@@ -12,7 +14,9 @@ import org.elasticsearch.client.transport.TransportClient;
 import org.elasticsearch.common.transport.InetSocketTransportAddress;
 import org.elasticsearch.index.query.QueryBuilders;
 
+import java.io.*;
 import java.net.InetAddress;
+import java.net.URL;
 import java.net.UnknownHostException;
 import java.util.List;
 import java.util.logging.Logger;
@@ -23,6 +27,7 @@ public class ElasticSearchClient {
     private Client client;
     private boolean connection;
     private static final Logger logger = Logger.getLogger(ElasticSearchClient.class.getName());
+
     public boolean connectToES(String host, int port) throws UnknownHostException {
         try {
             client = TransportClient.builder().build()
@@ -39,9 +44,7 @@ public class ElasticSearchClient {
         try {
             client.close();
             client = null;
-        } catch (Exception e) {
-
-        }
+        } catch (Exception e) { }
     }
 
     public boolean createIndex(String indexName) {
@@ -49,7 +52,7 @@ public class ElasticSearchClient {
         try {
             client.admin().indices().prepareCreate(indexName).get();
             success = Boolean.TRUE;
-        } catch (Exception e){
+        } catch (Exception e) {
             success = Boolean.FALSE;
         }
         return success;
@@ -60,7 +63,7 @@ public class ElasticSearchClient {
         try {
             client.admin().indices().flush(new FlushRequest(index).force(true)).actionGet();
             DeleteIndexResponse delete = client.admin().indices().delete(new DeleteIndexRequest(index)).actionGet();
-            success = !delete.isAcknowledged();
+            success = delete.isAcknowledged();
         }
         catch (Exception ex) {
             success = false;
@@ -99,5 +102,36 @@ public class ElasticSearchClient {
             result = null;
         }
         return result;
+    }
+
+    public String search(String indexName, String query) {
+        String result;
+        try {
+            SearchResponse response = client.prepareSearch(indexName)
+                    .setSearchType(SearchType.DFS_QUERY_THEN_FETCH)
+                    .setQuery(query)
+                    .execute()
+                    .actionGet();
+            result = response.toString();
+        } catch (Exception e) {
+            result = null;
+        }
+        return result;
+    }
+
+    public boolean addMapping(String indexName, String indexType) throws IOException {
+        boolean mappingAdded;
+        ObjectMapper mapper = new ObjectMapper();
+        URL url = this.getClass().getResource("/mapping.json");
+        JsonNode node = mapper.readTree(new File(url.getFile()));
+        try {
+            client.admin().indices().prepareCreate(indexName)
+                    .addMapping(node.toString())
+                    .get();
+            mappingAdded = true;
+        } catch (Exception e) {
+            mappingAdded = false;
+        }
+        return mappingAdded;
     }
 }
